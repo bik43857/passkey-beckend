@@ -1,0 +1,30 @@
+# Postgres for running the "uat" Spring profile locally (no TLS/Nginx/Docker
+# app containers — just the app and this DB, same as PHASE9's "local
+# development" section, but with UAT-shaped data kept separate from your
+# regular dev database).
+#
+# Different port (5433) and volume than docker-compose.yml's postgres, so you
+# can run both side by side.
+#
+# Usage: docker compose -f docker-compose.uat-local.yml up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: authdb_uat
+      POSTGRES_USER: authuser
+      POSTGRES_PASSWORD: authpass
+    ports:
+      - "5433:5432"
+    volumes:
+      - auth_pg_data_uat_local:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authuser -d authdb_uat"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  auth_pg_data_uat_local:

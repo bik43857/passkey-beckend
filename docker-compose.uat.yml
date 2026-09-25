@@ -1,0 +1,100 @@
+# UAT stack: same architecture as docker-compose.prod.yml (Browser → HTTPS →
+# Nginx → Spring Boot → PostgreSQL), pointed at the "uat" Spring profile and
+# using its own volume names so this can run on the same host as the prod
+# stack without colliding with it.
+#
+# WebAuthn/passkeys require a secure context on any non-localhost origin, so
+# UAT still needs a real domain + valid TLS — you can't skip HTTPS here just
+# because it's not "real" production. Use a dedicated UAT subdomain (e.g.
+# uat.example.com) with its own DNS record.
+#
+# Run with an explicit --env-file so this can coexist with a prod .env in the
+# same repo checkout:
+#   cp .env.uat.example .env.uat   # then edit it
+#   docker compose -f docker-compose.uat.yml --env-file .env.uat up -d --build postgres backend frontend
+#   docker compose -f docker-compose.uat.yml --env-file .env.uat run --rm certbot certbot certonly \
+#     --webroot -w /var/www/certbot -d ${DOMAIN_NAME} --email ${CERTBOT_EMAIL} --agree-tos --no-eff-email
+#   docker compose -f docker-compose.uat.yml --env-file .env.uat up -d certbot
+# See PHASE9_README.md Section 18 for the full walkthrough — same steps, just
+# swap the compose file and env file.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-authdb_uat}
+      POSTGRES_USER: ${DATABASE_USERNAME:-authuser}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?set DATABASE_PASSWORD in .env.uat}
+    volumes:
+      - auth_pg_data_uat:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USERNAME:-authuser} -d ${DATABASE_NAME:-authdb_uat}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: uat
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${DATABASE_NAME:-authdb_uat}
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-authuser}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?set DATABASE_PASSWORD in .env.uat}
+      WEBAUTHN_RP_ID: ${DOMAIN_NAME:?set DOMAIN_NAME in .env.uat}
+      WEBAUTHN_RP_NAME: ${APP_NAME:-Passkey Auth (UAT)}
+      # Must match byte-for-byte what the browser sends as the ceremony
+      # origin — see WebAuthnProperties Javadoc / Phase 3 README.
+      WEBAUTHN_ORIGIN: https://${DOMAIN_NAME:?set DOMAIN_NAME in .env.uat}
+      SESSION_SECRET: "${SESSION_SECRET:?set SESSION_SECRET in .env.uat — generate with: openssl rand -base64 48}"
+      SESSION_COOKIE_SECURE: "true"
+      CORS_ALLOWED_ORIGINS: https://${DOMAIN_NAME:?set DOMAIN_NAME in .env.uat}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    networks: [internal]
+    # No "ports:" — reached only through the frontend/Nginx container, same
+    # as prod.
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    environment:
+      DOMAIN_NAME: ${DOMAIN_NAME:?set DOMAIN_NAME in .env.uat}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certbot_certs_uat:/etc/letsencrypt
+      - certbot_webroot_uat:/var/www/certbot
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [internal]
+
+  certbot:
+    image: certbot/certbot
+    restart: unless-stopped
+    volumes:
+      - certbot_certs_uat:/etc/letsencrypt
+      - certbot_webroot_uat:/var/www/certbot
+    entrypoint: >
+      /bin/sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h; done"
+
+networks:
+  internal:
+
+volumes:
+  auth_pg_data_uat:
+  certbot_certs_uat:
+  certbot_webroot_uat:

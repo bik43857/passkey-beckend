@@ -1,0 +1,48 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:authdb-test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        format_sql: false
+
+  # Postgres-specific SQL in the Flyway migration (gen_random_uuid(), BYTEA,
+  # COMMENT ON) doesn't run against H2, so tests let Hibernate generate the
+  # schema straight from the @Entity classes instead. This means Flyway
+  # migration correctness itself is NOT covered by this test suite — verify
+  # migrations against a real Postgres instance (docker-compose up) before
+  # deploying. See PHASE8_README.md.
+  flyway:
+    enabled: false
+
+webauthn:
+  rp-id: localhost
+  rp-name: Test App
+  origin: http://localhost:5173
+  challenge-ttl-seconds: 120
+
+app:
+  session:
+    cookie-name: SESSION
+    ttl-hours: 12
+    secret: test-secret
+    cookie-secure: false
+    cookie-same-site: Lax
+  cors:
+    allowed-origins: http://localhost:5173
+  rate-limit:
+    # High on purpose: most integration tests register/log in several times
+    # against a SHARED Spring context (and therefore a shared RateLimiterService
+    # bucket map), so a realistic production-sized limit here would make
+    # unrelated tests fail with 429s. RateLimitingIntegrationTest overrides
+    # these to a small number via @TestPropertySource, which gives it its own
+    # isolated Spring context (and therefore a fresh, empty bucket map) to
+    # actually exercise the 429 behavior.
+    login-attempts-per-minute: 1000
+    register-attempts-per-minute: 1000
