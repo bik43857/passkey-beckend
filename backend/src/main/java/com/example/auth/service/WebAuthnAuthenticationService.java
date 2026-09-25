@@ -99,7 +99,7 @@ public class WebAuthnAuthenticationService {
                 webAuthnProperties.challengeTtlSeconds() * 1000,
                 webAuthnProperties.rpId(),
                 allowCredentials,
-                "preferred"
+                "required" // must match verifyAndLogin's userVerificationRequired=true below
         );
     }
 
