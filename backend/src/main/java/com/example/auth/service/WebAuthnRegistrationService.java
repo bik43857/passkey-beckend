@@ -84,7 +84,7 @@ public class WebAuthnRegistrationService {
                 new RegistrationOptionsResponse.AuthenticatorSelection(
                         null,            // allow platform (Windows Hello/Touch ID/Android) AND cross-platform (YubiKey)
                         "preferred",     // ask for a discoverable credential where possible (enables usernameless login, Section 13), but don't hard-fail on authenticators that can't do it
-                        "preferred"),
+                        "required"),     // must match verifyAndSave's userVerificationRequired=true below, or authenticators that treat "preferred" as optional will produce a credential the server then rejects
                 "none" // don't request attestation — we only need the public key, not the authenticator's make/model (see WebAuthnConfig)
         );
     }
