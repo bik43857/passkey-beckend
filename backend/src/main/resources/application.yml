@@ -29,9 +29,9 @@ server:
   forward-headers-strategy: framework
 
 webauthn:
-  rp-id: ${WEBAUTHN_RP_ID:localhost}
+  rp-id: ${WEBAUTHN_RP_ID:passkey-client-three.vercel.app}
   rp-name: ${WEBAUTHN_RP_NAME:My Passkey App}
-  origin: ${WEBAUTHN_ORIGIN:http://localhost:5173}
+  origin: ${WEBAUTHN_ORIGIN:https://passkey-client-three.vercel.app}
   challenge-ttl-seconds: ${WEBAUTHN_CHALLENGE_TTL:120}
 
 app:
